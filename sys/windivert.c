@@ -21,12 +21,12 @@
  * the terms of the GNU General Public License as published by the Free
  * Software Foundation; either version 2 of the License, or (at your option)
  * any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc., 51
  * Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -324,6 +324,20 @@ static void windivert_classify_inbound_network_v4_callout(
     IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
     const FWPS_FILTER0 *filter, IN UINT64 flow_context,
     OUT FWPS_CLASSIFY_OUT0 *result);
+
+
+static void windivert_classify_outbound_network_v4_callout(
+    IN const FWPS_INCOMING_VALUES0 *fixed_vals,
+    IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
+    const FWPS_FILTER0 *filter, IN UINT64 flow_context,
+    OUT FWPS_CLASSIFY_OUT0 *result);
+static void windivert_classify_inbound_network_v4_callout(
+    IN const FWPS_INCOMING_VALUES0 *fixed_vals,
+    IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
+    const FWPS_FILTER0 *filter, IN UINT64 flow_context,
+    OUT FWPS_CLASSIFY_OUT0 *result);
+
+
 static void windivert_classify_outbound_network_v6_callout(
     IN const FWPS_INCOMING_VALUES0 *fixed_vals,
     IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
@@ -391,6 +405,13 @@ DEFINE_GUID(WINDIVERT_SUBLAYER_FORWARD_IPV6_GUID,
     0xE70D0973, 0x935F, 0x4790,
     0x8E, 0x64, 0xF7, 0xF7, 0x36, 0x27, 0xA5, 0x8F);
 
+DEFINE_GUID(WINDIVERT_SUBLAYER_INBOUND_VSWITCH_IPV4_GUID,
+    0x8ba347e5, 0x209b, 0x4c83,
+    0xa5, 0x77, 0xaa, 0xc5, 0xda, 0xd9, 0xc7, 0x26);
+DEFINE_GUID(WINDIVERT_SUBLAYER_OUTBOUND_VSWITCH_IPV4_GUID,
+    0xf8ef76b9, 0x05b5, 0x4f89,
+    0x88, 0x06, 0x90, 0x93, 0x00, 0xef, 0x2e, 0x38);
+
 /*
  * WinDivert supported layers.
  */
@@ -421,6 +442,34 @@ static struct layer_s layer_outbound_network_ipv4_0 =
     windivert_classify_outbound_network_v4_callout,
 };
 static layer_t layer_outbound_network_ipv4 = &layer_outbound_network_ipv4_0;
+
+static struct layer_s layer_inbound_vswitch_ipv4_0 =
+{
+    L"" WINDIVERT_DEVICE_NAME L"_SubLayerInboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" sublayer vswitch (inbound IPv4)",
+    L"" WINDIVERT_DEVICE_NAME L"_CalloutInboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" callout vswitch (inbound IPv4)",
+    L"" WINDIVERT_DEVICE_NAME L"_FilterInboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" filter vswitch (inbound IPv4)",
+    {0},
+    {0},
+    windivert_classify_inbound_vswitch_v4_callout,
+};
+static layer_t layer_inbound_vswitch_ipv4 = &layer_inbound_vswitch_ipv4_0;
+
+static struct layer_s layer_outbound_vswitch_ipv4_0 =
+{
+    L"" WINDIVERT_DEVICE_NAME L"_SubLayerOutboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" sublayer vswitch (outbound IPv4)",
+    L"" WINDIVERT_DEVICE_NAME L"_CalloutOutboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" callout vswitch (outbound IPv4)",
+    L"" WINDIVERT_DEVICE_NAME L"_FilterOutboundVSwitchIPv4",
+    L"" WINDIVERT_DEVICE_NAME L" filter vswitch (outbound IPv4)",
+    {0},
+    {0},
+    windivert_classify_outbound_vswitch_v4_callout,
+};
+static layer_t layer_outbound_vswitch_ipv4 = &layer_outbound_vswitch_ipv4_0;
 
 static struct layer_s layer_inbound_network_ipv6_0 =
 {
@@ -543,11 +592,15 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
     layer_outbound_network_ipv6->layer_guid = FWPM_LAYER_OUTBOUND_IPPACKET_V6;
     layer_forward_network_ipv4->layer_guid = FWPM_LAYER_IPFORWARD_V4;
     layer_forward_network_ipv6->layer_guid = FWPM_LAYER_IPFORWARD_V6;
+
+    layer_inbound_vswitch_ipv4->layer_guid = FWPM_LAYER_INGRESS_VSWITCH_ETHERNET;
+    layer_outbound_vswitch_ipv4->layer_guid = FWPM_LAYER_EGRESS_VSWITCH_ETHERNET;
+
     layer_inbound_network_ipv4->sublayer_guid =
         WINDIVERT_SUBLAYER_INBOUND_IPV4_GUID;
-    layer_outbound_network_ipv4->sublayer_guid = 
+    layer_outbound_network_ipv4->sublayer_guid =
         WINDIVERT_SUBLAYER_OUTBOUND_IPV4_GUID;
-    layer_inbound_network_ipv6->sublayer_guid = 
+    layer_inbound_network_ipv6->sublayer_guid =
         WINDIVERT_SUBLAYER_INBOUND_IPV6_GUID;
     layer_outbound_network_ipv6->sublayer_guid =
         WINDIVERT_SUBLAYER_OUTBOUND_IPV6_GUID;
@@ -555,6 +608,11 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
         WINDIVERT_SUBLAYER_FORWARD_IPV4_GUID;
     layer_forward_network_ipv6->sublayer_guid =
         WINDIVERT_SUBLAYER_FORWARD_IPV6_GUID;
+
+    layer_inbound_vswitch_ipv4->sublayer_guid =
+        WINDIVERT_SUBLAYER_INBOUND_VSWITCH_IPV4_GUID;
+    layer_outbound_vswitch_ipv4->sublayer_guid =
+        WINDIVERT_SUBLAYER_OUTBOUND_VSWITCH_IPV4_GUID;
 
     // Configure ourself as a non-PnP driver:
     WDF_DRIVER_CONFIG_INIT(&config, WDF_NO_EVENT_CALLBACK);
@@ -625,7 +683,7 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
     WdfControlFinishInitializing(device);
 
     // Create the packet injection handles.
-    status = FwpsInjectionHandleCreate0(AF_INET, 
+    status = FwpsInjectionHandleCreate0(AF_INET,
         FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
         &inject_handle);
     if (!NT_SUCCESS(status))
@@ -633,7 +691,7 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
         DEBUG_ERROR("failed to create WFP packet injection handle", status);
         goto driver_entry_exit;
     }
-    status = FwpsInjectionHandleCreate0(AF_INET6, 
+    status = FwpsInjectionHandleCreate0(AF_INET6,
         FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
         &injectv6_handle);
     if (!NT_SUCCESS(status))
@@ -725,6 +783,16 @@ driver_entry_sublayer_error:
     {
         goto driver_entry_sublayer_error;
     }
+    status = windivert_install_sublayer(layer_inbound_vswitch_ipv4);
+    if (!NT_SUCCESS(status))
+    {
+        goto driver_entry_sublayer_error;
+    }
+    status = windivert_install_sublayer(layer_outbound_vswitch_ipv4);
+    if (!NT_SUCCESS(status))
+    {
+        goto driver_entry_sublayer_error;
+    }
     status = FwpmTransactionCommit0(engine_handle);
     if (!NT_SUCCESS(status))
     {
@@ -796,6 +864,10 @@ static void windivert_driver_unload(void)
             &layer_forward_network_ipv4->sublayer_guid);
         FwpmSubLayerDeleteByKey0(engine_handle,
             &layer_forward_network_ipv6->sublayer_guid);
+        FwpmSubLayerDeleteByKey0(engine_handle,
+            &layer_inbound_vswitch_ipv4->sublayer_guid);
+        FwpmSubLayerDeleteByKey0(engine_handle,
+            &layer_outbound_vswitch_ipv4->sublayer_guid);
         status = FwpmTransactionCommit0(engine_handle);
         if (!NT_SUCCESS(status))
         {
@@ -824,7 +896,7 @@ static NTSTATUS windivert_install_sublayer(layer_t layer)
     {
         DEBUG_ERROR("failed to add WFP sub-layer", status);
     }
-    
+
     return status;
 }
 
@@ -989,6 +1061,16 @@ static NTSTATUS windivert_install_callouts(context_t context, UINT8 layer,
                 layers[i++] = layer_forward_network_ipv6;
             }
             break;
+        case WINDIVERT_LAYER_VSWITCH:
+            if (is_inbound)
+            {
+                layers[i++] = layer_inbound_vswitch_ipv4;
+            }
+            if (is_outbound)
+            {
+                layers[i++] = layer_outbound_vswitch_ipv4;
+            }
+            break;
 
         default:
             return STATUS_INVALID_PARAMETER;
@@ -1045,7 +1127,7 @@ static NTSTATUS windivert_install_callout(context_t context, UINT idx,
     KeReleaseInStackQueuedSpinLock(&lock_handle);
 
     weight = WINDIVERT_FILTER_WEIGHT(priority);
-    
+
     RtlZeroMemory(&scallout, sizeof(scallout));
     scallout.calloutKey              = callout_guid;
     scallout.classifyFn              = layer->callout;
@@ -1235,7 +1317,7 @@ extern VOID windivert_cleanup(IN WDFFILEOBJECT object)
     BOOL sniff_mode, timeout, forward;
     UINT priority;
     NTSTATUS status;
-    
+
     DEBUG("CLEANUP: cleaning up WinDivert context (context=%p)", context);
 
     timestamp = KeQueryPerformanceCounter(NULL).QuadPart;
@@ -1325,9 +1407,9 @@ extern VOID windivert_close(IN WDFFILEOBJECT object)
     KLOCK_QUEUE_HANDLE lock_handle;
     context_t context = windivert_context_get(object);
     NTSTATUS status;
-    
+
     DEBUG("CLOSE: closing WinDivert context (context=%p)", context);
-    
+
     KeAcquireInStackQueuedSpinLock(&context->lock, &lock_handle);
     if (context->state != WINDIVERT_CONTEXT_STATE_CLOSING)
     {
@@ -1411,7 +1493,7 @@ static void windivert_read_service_request(packet_t packet, WDFREQUEST request)
 
     DEBUG("SERVICE: servicing read request (request=%p, packet=%p)", request,
         packet);
-        
+
     status = WdfRequestRetrieveOutputWdmMdl(request, &dst_mdl);
     if (!NT_SUCCESS(status))
     {
@@ -1584,7 +1666,7 @@ static NTSTATUS windivert_write(context_t context, WDFREQUEST request,
         DEBUG_ERROR("failed to get MDL address", status);
         goto windivert_write_exit;
     }
-    
+
     data_len = MmGetMdlByteCount(mdl);
     if (data_len > UINT16_MAX || data_len < sizeof(WINDIVERT_IPHDR))
     {
@@ -1887,22 +1969,22 @@ VOID windivert_caller_context(IN WDFDEVICE device, IN WDFREQUEST request)
         case IOCTL_WINDIVERT_SET_PARAM:
         case IOCTL_WINDIVERT_GET_PARAM:
             break;
-        
+
         default:
             status = STATUS_INVALID_DEVICE_REQUEST;
             DEBUG_ERROR("failed to complete I/O control; invalid request",
                 status);
             goto windivert_caller_context_error;
     }
-    
+
     req_context->addr = addr;
 
 windivert_caller_context_exit:
 
     status = WdfDeviceEnqueueRequest(device, request);
-    
-windivert_caller_context_error:    
-    
+
+windivert_caller_context_error:
+
     if (!NT_SUCCESS(status))
     {
         DEBUG_ERROR("failed to enqueue request", status);
@@ -1969,9 +2051,9 @@ extern VOID windivert_ioctl(IN WDFQUEUE queue, IN WDFREQUEST request,
                 return;
             }
             break;
-        
+
         case IOCTL_WINDIVERT_SEND:
-            
+
             req_context = windivert_req_context_get(request);
             addr = req_context->addr;
             status = windivert_write(context, request, addr);
@@ -1980,7 +2062,7 @@ extern VOID windivert_ioctl(IN WDFQUEUE queue, IN WDFREQUEST request,
                 return;
             }
             break;
-        
+
         case IOCTL_WINDIVERT_START_FILTER:
         {
             BOOL is_inbound, is_outbound, is_ipv4, is_ipv6;
@@ -2201,6 +2283,30 @@ static NTSTATUS windivert_notify_callout(IN FWPS_CALLOUT_NOTIFY_TYPE type,
     UNREFERENCED_PARAMETER(filter_key);
     UNREFERENCED_PARAMETER(filter);
     return STATUS_SUCCESS;
+}
+
+/*
+ * WinDivert classify inbound vswitch callout.
+ */
+static void windivert_classify_inbound_vswitch_v4_callout(
+    IN const FWPS_INCOMING_VALUES0 *fixed_vals,
+    IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
+    const FWPS_FILTER0 *filter, IN UINT64 flow_context,
+    OUT FWPS_CLASSIFY_OUT0 *result)
+{
+    return;
+}
+
+/*
+ * WinDivert classify outbound vswitch callout.
+ */
+static void windivert_classify_outbound_vswitch_v4_callout(
+    IN const FWPS_INCOMING_VALUES0 *fixed_vals,
+    IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
+    const FWPS_FILTER0 *filter, IN UINT64 flow_context,
+    OUT FWPS_CLASSIFY_OUT0 *result)
+{
+    return;
 }
 
 /*
@@ -2769,7 +2875,7 @@ static void windivert_reinject_packet(packet_t packet)
     }
     else
     {
-        status = FwpsInjectNetworkReceiveAsync0(handle, 
+        status = FwpsInjectNetworkReceiveAsync0(handle,
             (HANDLE)priority, 0, UNSPECIFIED_COMPARTMENT_ID, packet->if_idx,
             packet->sub_if_idx, buffers, windivert_inject_complete, NULL);
     }
@@ -3529,7 +3635,7 @@ static filter_t windivert_filter_compile(windivert_ioctl_filter_t ioctl_filter,
     {
         goto windivert_filter_compile_exit;
     }
- 
+
     for (i = 0; i < length; i++)
     {
         if (ioctl_filter[i].field > WINDIVERT_FILTER_FIELD_MAX ||
@@ -3748,7 +3854,7 @@ static filter_t windivert_filter_compile(windivert_ioctl_filter_t ioctl_filter,
                 goto windivert_filter_compile_exit;
         }
     }
-    
+
     result = (filter_t)windivert_malloc(i*sizeof(struct filter_s), FALSE);
     if (result != NULL)
     {

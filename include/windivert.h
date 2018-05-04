@@ -21,12 +21,12 @@
  * the terms of the GNU General Public License as published by the Free
  * Software Foundation; either version 2 of the License, or (at your option)
  * any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, write to the Free Software Foundation, Inc., 51
  * Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
@@ -96,6 +96,7 @@ typedef enum
 {
     WINDIVERT_LAYER_NETWORK = 0,        /* Network layer. */
     WINDIVERT_LAYER_NETWORK_FORWARD = 1 /* Network layer (forwarded packets) */
+    WINDIVERT_LAYER_VSWITCH = 2         /* vSwitch */
 } WINDIVERT_LAYER, *PWINDIVERT_LAYER;
 
 /*
@@ -377,7 +378,7 @@ extern WINDIVERTEXPORT BOOL WinDivertHelperParseIPv6Address(
  * Calculate IPv4/IPv6/ICMP/ICMPv6/TCP/UDP checksums.
  */
 extern WINDIVERTEXPORT UINT WinDivertHelperCalcChecksums(
-    __inout     PVOID pPacket, 
+    __inout     PVOID pPacket,
     __in        UINT packetLen,
     __in_opt    PWINDIVERT_ADDRESS pAddr,
     __in        UINT64 flags);
