@@ -94,9 +94,9 @@ typedef struct
  */
 typedef enum
 {
-    WINDIVERT_LAYER_NETWORK = 0,        /* Network layer. */
-    WINDIVERT_LAYER_NETWORK_FORWARD = 1 /* Network layer (forwarded packets) */
-    WINDIVERT_LAYER_VSWITCH = 2         /* vSwitch */
+    WINDIVERT_LAYER_NETWORK = 0,         /* Network layer. */
+    WINDIVERT_LAYER_NETWORK_FORWARD = 1, /* Network layer (forwarded packets) */
+    WINDIVERT_LAYER_VSWITCH = 2          /* vSwitch */
 } WINDIVERT_LAYER, *PWINDIVERT_LAYER;
 
 /*

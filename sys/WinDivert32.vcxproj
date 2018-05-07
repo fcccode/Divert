@@ -51,10 +51,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="PropertySheets">
-    <PlatformToolset>WindowsApplicationForDrivers8.1</PlatformToolset>
-    <ConfigurationType>Application</ConfigurationType>
-    <DriverType />
-    <TARGETNAME>passthru</TARGETNAME>
+    <PlatformToolset>WindowsKernelModeDriver8.1</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <TARGETNAME>WinDivert32</TARGETNAME>
     <Configuration Condition="'$(Configuration)' == ''">Win8.1 Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">Win32</Platform>
   </PropertyGroup>
@@ -70,7 +70,7 @@
     <Import Project="$(VCTargetsPath)\WDKConversion\PreConfiguration.props" />
   </ImportGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{B73F023C-FDF7-4FB2-AD4B-8FB3736F5235}</ProjectGuid>
+    <ProjectGuid>{829C0C2D-2408-49C3-83DB-FE84A93189AB}</ProjectGuid>
     <RootNamespace>$(MSBuildProjectName)</RootNamespace>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Win8.1 Debug|Win32'">

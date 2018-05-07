@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Choose>
+    <When Condition="'$(_BUILDARCH)'=='x86'">
+      <PropertyGroup>
+        <CPU Condition="'$(OVERRIDE_CPU)'!='true'">i386</CPU>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <CPU Condition="'$(OVERRIDE_CPU)'!='true'">$(_BUILDARCH)</CPU>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+</Project>

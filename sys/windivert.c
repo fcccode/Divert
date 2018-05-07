@@ -32,14 +32,36 @@
  * Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include <ntdef.h>
+#include <sdkddkver.h>
+
+#ifdef NTDDI_VERSION
+#undef NTDDI_VERSION
+#define NTDDI_VERSION NTDDI_WIN8
+#else
+#define NTDDI_VERSION NTDDI_WIN8
+#endif
+
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#define _WIN32_WINNT _WIN32_WINNT_WIN8
+#else
+#define _WIN32_WINNT _WIN32_WINNT_WIN8
+#endif
+
+#include <ndis.h>
 #include <ntddk.h>
-#include <fwpsk.h>
-#include <fwpmk.h>
 #include <wdf.h>
+#include <fwpmk.h>
+
+
+#include <fwpsk.h>
+
 #include <stdarg.h>
 #include <ntstrsafe.h>
 #define INITGUID
 #include <guiddef.h>
+
 
 #include "windivert_device.h"
 
@@ -212,6 +234,9 @@ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(req_context_s, windivert_req_context_get);
  * WinDivert packet structure.
  */
 #define WINDIVERT_WORK_QUEUE_LEN_MAX        2048
+typedef UINT32 NDIS_SWITCH_PORT_ID;
+typedef USHORT NDIS_SWITCH_NIC_INDEX;
+
 struct packet_s
 {
     LIST_ENTRY entry;                       // Entry for queue.
@@ -227,6 +252,10 @@ struct packet_s
     LONGLONG timestamp;                     // Packet timestamp.
     NDIS_TCP_IP_CHECKSUM_NET_BUFFER_LIST_INFO checksums;
                                             // Checksum information.
+    FWP_BYTE_BLOB vSwitchId;
+    NDIS_SWITCH_PORT_ID   vSwitchSourcePortId;
+    NDIS_SWITCH_NIC_INDEX vSwitchSourceNicIndex;
+
     size_t data_len;                        // Length of `data'.
     char *data;                             // Packet data.
 };
@@ -326,12 +355,12 @@ static void windivert_classify_inbound_network_v4_callout(
     OUT FWPS_CLASSIFY_OUT0 *result);
 
 
-static void windivert_classify_outbound_network_v4_callout(
+static void windivert_classify_outbound_vswitch_v4_callout(
     IN const FWPS_INCOMING_VALUES0 *fixed_vals,
     IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
     const FWPS_FILTER0 *filter, IN UINT64 flow_context,
     OUT FWPS_CLASSIFY_OUT0 *result);
-static void windivert_classify_inbound_network_v4_callout(
+static void windivert_classify_inbound_vswitch_v4_callout(
     IN const FWPS_INCOMING_VALUES0 *fixed_vals,
     IN const FWPS_INCOMING_METADATA_VALUES0 *meta_vals, IN OUT void *data,
     const FWPS_FILTER0 *filter, IN UINT64 flow_context,
@@ -361,12 +390,12 @@ static void windivert_classify_forward_network_v6_callout(
 static void windivert_classify_callout(context_t context, IN UINT8 direction,
     IN UINT32 if_idx, IN UINT32 sub_if_idx, IN BOOL is_ipv4,
     IN BOOL loopback, IN UINT advance, IN OUT void *data,
-    IN UINT64 flow_context, OUT FWPS_CLASSIFY_OUT0 *result);
+    IN UINT64 flow_context, OUT FWPS_CLASSIFY_OUT0 *result, FWP_BYTE_BLOB *pvSwitchId, NDIS_SWITCH_PORT_ID vSwitchSourcePortId, NDIS_SWITCH_NIC_INDEX vSwitchSourceNicIndex);
 static BOOL windivert_queue_work(context_t context, BOOL sniff_mode,
     BOOL drop_mode, PNET_BUFFER_LIST buffers, PNET_BUFFER buffer,
     UINT8 direction, UINT32 if_idx, UINT32 sub_if_idx, BOOL is_ipv4,
     BOOL forward, BOOL impostor, BOOL loopback, BOOL match, UINT32 priority,
-    LONGLONG timestamp);
+    LONGLONG timestamp, FWP_BYTE_BLOB *pvSwitchId, NDIS_SWITCH_PORT_ID vSwitchSourcePortId, NDIS_SWITCH_NIC_INDEX vSwitchSourceNicIndex);
 static void windivert_queue_packet(context_t context, packet_t packet);
 static void windivert_reinject_packet(packet_t packet);
 static void windivert_free_packet(packet_t packet);
@@ -2294,7 +2323,26 @@ static void windivert_classify_inbound_vswitch_v4_callout(
     const FWPS_FILTER0 *filter, IN UINT64 flow_context,
     OUT FWPS_CLASSIFY_OUT0 *result)
 {
-    return;
+    NDIS_SWITCH_PORT_ID         sourcePortID         = 0;
+    NDIS_SWITCH_NIC_INDEX       sourceNICIndex       = 0;
+
+    if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
+                                         FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_PORT_ID))
+       sourcePortID = meta_vals->vSwitchSourcePortId;
+
+    if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
+                                         FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_NIC_INDEX))
+       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals>vSwitchSourceNicIndex;
+
+    windivert_classify_callout((context_t)filter->context,
+        WINDIVERT_DIRECTION_INBOUND,
+            0,
+            0,
+        TRUE,
+        FALSE,
+        0, data, flow_context, result,
+        fixed_vals->incomingValue[FWPS_FIELD_INGRESS_VSWITCH_ETHERNET_VSWITCH_ID].value.byteBlob,
+        sourcePortID, sourceNICIndex);
 }
 
 /*
@@ -2306,7 +2354,26 @@ static void windivert_classify_outbound_vswitch_v4_callout(
     const FWPS_FILTER0 *filter, IN UINT64 flow_context,
     OUT FWPS_CLASSIFY_OUT0 *result)
 {
-    return;
+    NDIS_SWITCH_PORT_ID         sourcePortID         = 0;
+    NDIS_SWITCH_NIC_INDEX       sourceNICIndex       = 0;
+
+    if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
+                                         FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_PORT_ID))
+       sourcePortID = meta_vals->vSwitchSourcePortId;
+
+    if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
+                                         FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_NIC_INDEX))
+       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals>vSwitchSourceNicIndex;
+
+    windivert_classify_callout((context_t)filter->context,
+        WINDIVERT_DIRECTION_OUTBOUND,
+            0,
+            0,
+        TRUE,
+        FALSE,
+        0, data, flow_context, result,
+        fixed_vals->incomingValue[FWPS_FIELD_INGRESS_VSWITCH_ETHERNET_VSWITCH_ID].value.byteBlob,
+        sourcePortID, sourceNICIndex);
 }
 
 /*
@@ -2328,7 +2395,7 @@ static void windivert_classify_outbound_network_v4_callout(
         (fixed_vals->incomingValue[
             FWPS_FIELD_OUTBOUND_IPPACKET_V4_FLAGS].value.uint32 &
             FWP_CONDITION_FLAG_IS_LOOPBACK) != 0,
-        0, data, flow_context, result);
+        0, data, flow_context, result, NULL, 0,0);
 }
 
 /*
@@ -2350,7 +2417,7 @@ static void windivert_classify_outbound_network_v6_callout(
         (fixed_vals->incomingValue[
             FWPS_FIELD_OUTBOUND_IPPACKET_V6_FLAGS].value.uint32 &
             FWP_CONDITION_FLAG_IS_LOOPBACK) != 0,
-        0, data, flow_context, result);
+        0, data, flow_context, result, NULL, 0,0);
 }
 
 /*
@@ -2373,7 +2440,7 @@ static void windivert_classify_inbound_network_v4_callout(
         (fixed_vals->incomingValue[
             FWPS_FIELD_INBOUND_IPPACKET_V4_FLAGS].value.uint32 &
             FWP_CONDITION_FLAG_IS_LOOPBACK) != 0,
-        advance, data, flow_context, result);
+        advance, data, flow_context, result, NULL, 0,0);
 }
 
 /*
@@ -2396,7 +2463,7 @@ static void windivert_classify_inbound_network_v6_callout(
         (fixed_vals->incomingValue[
             FWPS_FIELD_INBOUND_IPPACKET_V6_FLAGS].value.uint32 &
             FWP_CONDITION_FLAG_IS_LOOPBACK) != 0,
-        advance, data, flow_context, result);
+        advance, data, flow_context, result, NULL, 0,0);
 }
 
 /*
@@ -2412,7 +2479,7 @@ static void windivert_classify_forward_network_v4_callout(
         WINDIVERT_DIRECTION_OUTBOUND,
         fixed_vals->incomingValue[
             FWPS_FIELD_IPFORWARD_V4_DESTINATION_INTERFACE_INDEX].value.uint32,
-        0, TRUE, FALSE, 0, data, flow_context, result);
+        0, TRUE, FALSE, 0, data, flow_context, result, NULL,0,0);
 }
 
 /*
@@ -2428,7 +2495,7 @@ static void windivert_classify_forward_network_v6_callout(
         WINDIVERT_DIRECTION_OUTBOUND,
         fixed_vals->incomingValue[
             FWPS_FIELD_IPFORWARD_V6_DESTINATION_INTERFACE_INDEX].value.uint32,
-        0, FALSE, FALSE, 0, data, flow_context, result);
+        0, TRUE, FALSE, 0, data, flow_context, result, NULL,0,0);
 }
 
 /*
@@ -2437,7 +2504,7 @@ static void windivert_classify_forward_network_v6_callout(
 static void windivert_classify_callout(context_t context, IN UINT8 direction,
     IN UINT32 if_idx, IN UINT32 sub_if_idx, IN BOOL is_ipv4, IN BOOL loopback,
     IN UINT advance, IN OUT void *data, IN UINT64 flow_context,
-    OUT FWPS_CLASSIFY_OUT0 *result)
+    OUT FWPS_CLASSIFY_OUT0 *result, FWP_BYTE_BLOB *pvSwitchId, NDIS_SWITCH_PORT_ID vSwitchSourcePortId, NDIS_SWITCH_NIC_INDEX vSwitchSourceNicIndex)
 {
     KLOCK_QUEUE_HANDLE lock_handle;
     FWPS_PACKET_INJECTION_STATE packet_state;
@@ -2580,7 +2647,7 @@ static void windivert_classify_callout(context_t context, IN UINT8 direction,
     {
         ok = windivert_queue_work(context, sniff_mode, drop_mode, buffers,
             buffer_itr, direction, if_idx, sub_if_idx, is_ipv4, forward,
-            impostor, loopback, FALSE, priority, timestamp);
+            impostor, loopback, FALSE, priority, timestamp, pvSwitchId, vSwitchSourcePortId, vSwitchSourceNicIndex);
         if (!ok)
         {
             goto windivert_classify_callout_exit;
@@ -2591,7 +2658,7 @@ static void windivert_classify_callout(context_t context, IN UINT8 direction,
     // STEP (2): Queue the first matching packet buffer_fst:
     ok = windivert_queue_work(context, sniff_mode, drop_mode, buffers,
         buffer_fst, direction, if_idx, sub_if_idx, is_ipv4, forward, impostor,
-        loopback, TRUE, priority, timestamp);
+        loopback, TRUE, priority, timestamp, pvSwitchId, vSwitchSourcePortId, vSwitchSourceNicIndex);
     if (advance != 0)
     {
         // Advance the NET_BUFFER to its original position.  Note that we can
@@ -2613,7 +2680,7 @@ static void windivert_classify_callout(context_t context, IN UINT8 direction,
             outbound, is_ipv4, impostor, loopback, filter);
         ok = windivert_queue_work(context, sniff_mode, drop_mode, buffers,
             buffer_itr, direction, if_idx, sub_if_idx, is_ipv4, forward,
-            impostor, loopback, match, priority, timestamp);
+            impostor, loopback, match, priority, timestamp, pvSwitchId, vSwitchSourcePortId, vSwitchSourceNicIndex);
         if (!ok)
         {
             goto windivert_classify_callout_exit;
@@ -2673,7 +2740,7 @@ static BOOL windivert_queue_work(context_t context, BOOL sniff_mode,
     BOOL drop_mode, PNET_BUFFER_LIST buffers, PNET_BUFFER buffer,
     UINT8 direction, UINT32 if_idx, UINT32 sub_if_idx, BOOL is_ipv4,
     BOOL forward, BOOL impostor, BOOL loopback, BOOL match, UINT32 priority,
-    LONGLONG timestamp)
+    LONGLONG timestamp, FWP_BYTE_BLOB *pvSwitchId, NDIS_SWITCH_PORT_ID vSwitchSourcePortId, NDIS_SWITCH_NIC_INDEX vSwitchSourceNicIndex)
 {
     KLOCK_QUEUE_HANDLE lock_handle;
     packet_t work;
@@ -2712,6 +2779,23 @@ static BOOL windivert_queue_work(context_t context, BOOL sniff_mode,
     {
         RtlCopyMemory(work->data, data, data_len);
     }
+
+    if (pvSwitchId) {
+        UINT32 id_size = pvSwitchId->size;
+        work->vSwitchId.size = id_size;
+        work->vSwitchId.data = (UINT8 *)(windivert_malloc(id_size, FALSE));
+        if (pvSwitchId->data) {
+            RtlCopyMemory(work->vSwitchId.data, pvSwitchId->data, id_size);
+        }
+        work->vSwitchSourcePortId = vSwitchSourcePortId;
+        work->vSwitchSourceNicIndex = vSwitchSourceNicIndex;
+    } else {
+        work->vSwitchId.size = 0;
+        work->vSwitchId.data = NULL;
+        work->vSwitchSourcePortId = 0;
+        work->vSwitchSourceNicIndex = 0;
+    }
+
     work->is_ipv4 = is_ipv4;
     work->forward = forward;
     work->impostor = impostor;
@@ -2899,6 +2983,7 @@ static void windivert_reinject_packet(packet_t packet)
 static void windivert_free_packet(packet_t packet)
 {
     windivert_free(packet->data);
+    windivert_free(packet->vSwitchId.data);
     windivert_free(packet);
 }
 

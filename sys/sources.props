@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Choose>
+    <When Condition="'$(_BUILDARCH)'=='x86'">
+      <PropertyGroup>
+        <CPU Condition="'$(OVERRIDE_CPU)'!='true'">i386</CPU>
+        <BITS Condition="'$(OVERRIDE_BITS)'!='true'">32</BITS>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <CPU Condition="'$(OVERRIDE_CPU)'!='true'">$(_BUILDARCH)</CPU>
+        <BITS Condition="'$(OVERRIDE_BITS)'!='true'">64</BITS>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+  <PropertyGroup>
+    <TARGETNAME Condition="'$(OVERRIDE_TARGETNAME)'!='true'">WinDivert$(BITS)</TARGETNAME>
+    <TARGETTYPE Condition="'$(OVERRIDE_TARGETTYPE)'!='true'">DRIVER</TARGETTYPE>
+    <TARGETPATH Condition="'$(OVERRIDE_TARGETPATH)'!='true'">..\install\WDDK</TARGETPATH>
+    <TARGETLIBS Condition="'$(OVERRIDE_TARGETLIBS)'!='true'">$(DDK_LIB_PATH)\wdmsec.lib      $(DDK_LIB_PATH)\ndis.lib      $(DDK_LIB_PATH)\fwpkclnt.lib      $(SDK_LIB_PATH)\uuid.lib</TARGETLIBS>
+    <NTTARGETFILES Condition="'$(OVERRIDE_NTTARGETFILES)'!='true'" />
+    <KMDF_VERSION_MAJOR Condition="'$(OVERRIDE_KMDF_VERSION_MAJOR)'!='true'">1</KMDF_VERSION_MAJOR>
+    <C_DEFINES Condition="'$(OVERRIDE_C_DEFINES)'!='true'">$(C_DEFINES) -DBINARY_COMPATIBLE=0 -DNT -DUNICODE -D_UNICODE      -DNDIS60 -DNDIS_SUPPORT_NDIS60</C_DEFINES>
+    <INCLUDES Condition="'$(OVERRIDE_INCLUDES)'!='true'">$(DDK_INC_PATH);..\include</INCLUDES>
+    <SOURCES Condition="'$(OVERRIDE_SOURCES)'!='true'">windivert.rc windivert.c</SOURCES>
+  </PropertyGroup>
+</Project>

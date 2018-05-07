@@ -374,7 +374,9 @@ static void BlackListRead(PBLACKLIST blacklist, const char *filename)
     int c;
     UINT16 i, j;
     PURL url;
-    FILE *file = fopen(filename, "r");
+	FILE *file = NULL; 
+	
+	fopen_s(&file, filename, "r");
     
     if (file == NULL)
     {
@@ -442,7 +444,7 @@ static void BlackListRead(PBLACKLIST blacklist, const char *filename)
         {
             goto memory_error;
         }
-        strcpy(url->uri, uri);
+        strcpy_s(url->uri, j+1, uri);
         for (j = 0; j < i; j++)
         {
             url->domain[j] = domain[i-j-1];
