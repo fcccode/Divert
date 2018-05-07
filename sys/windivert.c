@@ -234,8 +234,6 @@ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(req_context_s, windivert_req_context_get);
  * WinDivert packet structure.
  */
 #define WINDIVERT_WORK_QUEUE_LEN_MAX        2048
-typedef UINT32 NDIS_SWITCH_PORT_ID;
-typedef USHORT NDIS_SWITCH_NIC_INDEX;
 
 struct packet_s
 {
