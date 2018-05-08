@@ -32,31 +32,16 @@
  * Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#define NDIS_WDM 1
+#define NDIS630 1
+
 #include <ntdef.h>
-#include <sdkddkver.h>
-
-#ifdef NTDDI_VERSION
-#undef NTDDI_VERSION
-#define NTDDI_VERSION NTDDI_WIN8
-#else
-#define NTDDI_VERSION NTDDI_WIN8
-#endif
-
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#define _WIN32_WINNT _WIN32_WINNT_WIN8
-#else
-#define _WIN32_WINNT _WIN32_WINNT_WIN8
-#endif
 
 #include <ndis.h>
 #include <ntddk.h>
-#include <wdf.h>
 #include <fwpmk.h>
-
-
+#include <wdf.h>
 #include <fwpsk.h>
-
 #include <stdarg.h>
 #include <ntstrsafe.h>
 #define INITGUID
@@ -291,6 +276,7 @@ typedef struct
  * Global state.
  */
 static HANDLE inject_handle = NULL;
+static HANDLE inject_vswitch_handle = NULL;
 static HANDLE injectv6_handle = NULL;
 static NDIS_HANDLE nbl_pool_handle = NULL;
 static NDIS_HANDLE nb_pool_handle = NULL;
@@ -711,7 +697,7 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
 
     // Create the packet injection handles.
     status = FwpsInjectionHandleCreate0(AF_INET,
-        FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
+		FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
         &inject_handle);
     if (!NT_SUCCESS(status))
     {
@@ -719,7 +705,7 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
         goto driver_entry_exit;
     }
     status = FwpsInjectionHandleCreate0(AF_INET6,
-        FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
+		FWPS_INJECTION_TYPE_NETWORK | FWPS_INJECTION_TYPE_FORWARD,
         &injectv6_handle);
     if (!NT_SUCCESS(status))
     {
@@ -727,6 +713,14 @@ extern NTSTATUS DriverEntry(IN PDRIVER_OBJECT driver_obj,
             status);
         goto driver_entry_exit;
     }
+	status = FwpsInjectionHandleCreate0(AF_UNSPEC,
+		FWPS_INJECTION_TYPE_L2, &inject_vswitch_handle);
+	if (!NT_SUCCESS(status))
+	{
+		DEBUG_ERROR("failed to create vSwitch injection handle", status);
+		goto driver_entry_exit;
+	}
+
 
     // Create a NET_BUFFER_LIST pool handle.
     RtlZeroMemory(&nbl_pool_params, sizeof(nbl_pool_params));
@@ -862,6 +856,10 @@ static void windivert_driver_unload(void)
     {
         FwpsInjectionHandleDestroy0(injectv6_handle);
     }
+	if (inject_vswitch_handle != NULL)
+	{
+		FwpsInjectionHandleDestroy0(inject_vswitch_handle);
+	}
     if (nbl_pool_handle != NULL)
     {
         NdisFreeNetBufferListPool(nbl_pool_handle);
@@ -1581,6 +1579,10 @@ static void windivert_read_service_request(packet_t packet, WDFREQUEST request)
                 (UINT8)packet->checksums.Receive.UdpChecksumSucceeded;
         }
         addr->Reserved = 0;
+		addr->vSwitchIdLen = packet->vSwitchId.size;
+		addr->vSwitchIdData = packet->vSwitchId.data;
+		addr->vSwitchSourceNicIdx = packet->vSwitchSourceNicIndex;
+		addr->vSwitchSourcePortId = packet->vSwitchSourcePortId;
     }
 
 windivert_read_service_request_exit:
@@ -1819,7 +1821,15 @@ windivert_write_bad_packet:
 
     handle = (is_ipv4? inject_handle: injectv6_handle);
     compl_handle = ((flags & WINDIVERT_FLAG_DEBUG) != 0? (HANDLE)request: NULL);
-    if (layer == WINDIVERT_LAYER_NETWORK_FORWARD)
+	if (layer == WINDIVERT_LAYER_VSWITCH) {
+		FWP_BYTE_BLOB *vSwitchId = (FWP_BYTE_BLOB *)&(addr->vSwitchIdLen);
+		handle = inject_vswitch_handle;
+		status = FwpsInjectvSwitchEthernetIngressAsync0(
+			handle, (HANDLE)priority, 0, NULL,
+			vSwitchId, addr->vSwitchSourcePortId, addr->vSwitchSourceNicIdx,
+			buffers, windivert_inject_complete, compl_handle);
+	}
+	else if (layer == WINDIVERT_LAYER_NETWORK_FORWARD)
     {
         status = FwpsInjectForwardAsync0(handle, (HANDLE)priority, 0,
             (is_ipv4? AF_INET: AF_INET6), UNSPECIFIED_COMPARTMENT_ID,
@@ -2330,7 +2340,7 @@ static void windivert_classify_inbound_vswitch_v4_callout(
 
     if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
                                          FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_NIC_INDEX))
-       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals>vSwitchSourceNicIndex;
+       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals->vSwitchSourceNicIndex;
 
     windivert_classify_callout((context_t)filter->context,
         WINDIVERT_DIRECTION_INBOUND,
@@ -2361,7 +2371,7 @@ static void windivert_classify_outbound_vswitch_v4_callout(
 
     if(FWPS_IS_L2_METADATA_FIELD_PRESENT(meta_vals,
                                          FWPS_L2_METADATA_FIELD_VSWITCH_SOURCE_NIC_INDEX))
-       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals>vSwitchSourceNicIndex;
+       sourceNICIndex = (NDIS_SWITCH_NIC_INDEX)meta_vals->vSwitchSourceNicIndex;
 
     windivert_classify_callout((context_t)filter->context,
         WINDIVERT_DIRECTION_OUTBOUND,
@@ -2532,7 +2542,11 @@ static void windivert_classify_callout(context_t context, IN UINT8 direction,
         // should have already been indicated.
         return;
     }
-    if (is_ipv4)
+	if (pvSwitchId) {
+		packet_state = FwpsQueryPacketInjectionState0(inject_vswitch_handle, buffers,
+			&packet_context);
+
+	}else if (is_ipv4)
     {
         packet_state = FwpsQueryPacketInjectionState0(inject_handle, buffers,
             &packet_context);
@@ -2943,7 +2957,13 @@ static void windivert_reinject_packet(packet_t packet)
     NET_BUFFER_LIST_INFO(buffers, TcpIpChecksumNetBufferListInfo) =
         packet->checksums.Value;
     handle = (packet->is_ipv4? inject_handle: injectv6_handle);
-    if (packet->forward)
+	if (packet->vSwitchId.size) {
+		handle = inject_vswitch_handle;
+		status = FwpsInjectvSwitchEthernetIngressAsync0(
+			handle, (HANDLE)priority, 0, NULL,
+			&(packet->vSwitchId), packet->vSwitchSourcePortId, packet->vSwitchSourceNicIndex, 
+			buffers, windivert_inject_complete, NULL);
+	}else if (packet->forward)
     {
         status = FwpsInjectForwardAsync0(handle, (HANDLE)priority, 0,
             (packet->is_ipv4? AF_INET: AF_INET6), UNSPECIFIED_COMPARTMENT_ID,

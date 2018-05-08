@@ -43,11 +43,11 @@ for ENV in $ENVS
 do
     if [ $ENV = "i686-w64-mingw32" ]
     then
-        CPU=i386
+        CPU=x86
         BITS=32
         MANGLE=_
     else
-        CPU=amd64
+        CPU=x64
         BITS=64
         MANGLE=
     fi

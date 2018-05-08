@@ -16,7 +16,7 @@
     <TARGETNAME Condition="'$(OVERRIDE_TARGETNAME)'!='true'">netdump</TARGETNAME>
     <TARGETTYPE Condition="'$(OVERRIDE_TARGETTYPE)'!='true'">PROGRAM</TARGETTYPE>
     <TARGETPATH Condition="'$(OVERRIDE_TARGETPATH)'!='true'">..\..\install\WDDK</TARGETPATH>
-    <TARGETLIBS Condition="'$(OVERRIDE_TARGETLIBS)'!='true'">$(SDK_LIB_PATH)\setupapi.lib      $(SDK_LIB_PATH)\user32.lib      $(SDK_LIB_PATH)\ws2_32.lib      $(TARGETPATH)\$(CPU)\WinDivert.lib</TARGETLIBS>
+    <TARGETLIBS Condition="'$(OVERRIDE_TARGETLIBS)'!='true'">$(SDK_LIB_PATH)\setupapi.lib      $(SDK_LIB_PATH)\user32.lib      $(SDK_LIB_PATH)\ws2_32.lib      $(TARGETPATH)\$(PLATFORM)\WinDivert.lib</TARGETLIBS>
     <UMTYPE Condition="'$(OVERRIDE_UMTYPE)'!='true'">console</UMTYPE>
     <UMENTRY Condition="'$(OVERRIDE_UMENTRY)'!='true'">main</UMENTRY>
     <USE_MSVCRT Condition="'$(OVERRIDE_USE_MSVCRT)'!='true'">1</USE_MSVCRT>

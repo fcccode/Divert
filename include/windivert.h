@@ -84,6 +84,10 @@ typedef struct
     UINT8  PseudoTCPChecksum:1;         /* Packet has pseudo TCP checksum? */
     UINT8  PseudoUDPChecksum:1;         /* Packet has pseudo UDP checksum? */
     UINT8  Reserved:2;
+	UINT32 vSwitchIdLen;
+	UINT8 *vSwitchIdData;
+	UINT32 vSwitchSourcePortId;
+	USHORT vSwitchSourceNicIdx;
 } WINDIVERT_ADDRESS, *PWINDIVERT_ADDRESS;
 
 #define WINDIVERT_DIRECTION_OUTBOUND    0

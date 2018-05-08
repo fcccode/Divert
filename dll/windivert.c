@@ -405,12 +405,15 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
     SC_HANDLE service;
     UINT32 priority32;
 
+	fprintf(stdout, "checking flags...\n");
     // Parameter checking.
     if (!WINDIVERT_FLAGS_VALID(flags) || layer > WINDIVERT_LAYER_MAX)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return INVALID_HANDLE_VALUE;
     }
+
+	fprintf(stdout, "checking priority...\n");
     priority32 = WINDIVERT_PRIORITY(priority);
     if (priority32 < WINDIVERT_PRIORITY_MIN ||
         priority32 > WINDIVERT_PRIORITY_MAX)
@@ -420,6 +423,7 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
     }
 
     // Compile the filter:
+	fprintf(stdout, "compiling filter...\n");
     comp_err = WinDivertCompileFilter(filter, layer, object, &obj_len);
     if (IS_ERROR(comp_err))
     {
@@ -431,6 +435,7 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
     WinDivertFilterDump(object, obj_len);
 #endif
 
+	fprintf(stdout, "open device...\n");
     // Attempt to open the WinDivert device:
     handle = CreateFile(L"\\\\.\\" WINDIVERT_DEVICE_NAME,
         GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
@@ -445,6 +450,7 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
 
         // Open failed because the device isn't installed; install it now.
         SetLastError(0);
+		fprintf(stdout, "installing driver...\n");
         service = WinDivertDriverInstall();
         if (service == NULL)
         {
@@ -470,6 +476,8 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
     }
 
     // Set the layer:
+	fprintf(stdout, "setting layer...\n");
+
     if (layer != WINDIVERT_LAYER_DEFAULT)
     {
         if (!WinDivertIoControl(handle, IOCTL_WINDIVERT_SET_LAYER, 0,
@@ -479,7 +487,7 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
             return INVALID_HANDLE_VALUE;
         }
     }
-
+	fprintf(stdout, "setting flags...\n");
     // Set the flags:
     if (flags != 0)
     {
@@ -490,6 +498,8 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
             return INVALID_HANDLE_VALUE;
         }
     }
+
+	fprintf(stdout, "setting priority...\n");
 
     // Set the priority:
     if (priority32 != WINDIVERT_PRIORITY_DEFAULT)
@@ -502,6 +512,7 @@ extern HANDLE WinDivertOpen(const char *filter, WINDIVERT_LAYER layer,
         }
     }
 
+	fprintf(stdout, "starting filter...\n");
     // Start the filter:
     if (!WinDivertIoControl(handle, IOCTL_WINDIVERT_START_FILTER, 0, 0,
             object, obj_len*sizeof(struct windivert_ioctl_filter_s), NULL))
